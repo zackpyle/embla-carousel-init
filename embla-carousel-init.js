@@ -29,6 +29,14 @@
  *   autoplayStopOnMouseEnter: true
  * });
  * 
+ * // Fading slideshow (one slide per view, cross-fades instead of sliding)
+ * initEmblaCarousel('.carousel', {
+ *   loop: true,
+ *   fade: true,
+ *   autoplay: true,
+ *   autoplayDelay: 5000
+ * });
+ * 
  * // Custom navigation selectors
  * initEmblaCarousel('.carousel', {
  *   enableButtons: true,
@@ -86,6 +94,8 @@ const SUPPORTS_INERT = typeof HTMLElement !== 'undefined' && 'inert' in HTMLElem
  * @param {number} config.autoplayDelay - Time in ms between slide advances (default: 4000)
  * @param {boolean} config.autoplayStopOnInteraction - Stop autoplay after user drags (default: false)
  * @param {boolean} config.autoplayStopOnMouseEnter - Pause autoplay on mouse enter (default: false)
+ * @param {boolean} config.fade - Enable fade plugin: slides cross-fade in place instead of sliding.
+ *   Each slide must fill the viewport (flex: 0 0 100%). Don't combine with autoScroll. (default: false)
  * @param {string} config.announcement - Screen reader announcement template (default: 'Slide {current} of {total}')
  * @param {boolean} config.enableNoNavClass - Whether to toggle the `embla--no-nav` class on the viewport
  *   when there is only 1 scroll position (i.e. all slides already fit on screen, so there's nothing left
@@ -155,6 +165,8 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     autoplayDelay: config.autoplayDelay !== undefined ? config.autoplayDelay : 4000,
     autoplayStopOnInteraction: config.autoplayStopOnInteraction !== undefined ? config.autoplayStopOnInteraction : false,
     autoplayStopOnMouseEnter: config.autoplayStopOnMouseEnter !== undefined ? config.autoplayStopOnMouseEnter : true,
+    // Fade (cross-fade transitions)
+    fade: config.fade || false,
     announcement: config.announcement || 'Slide {current} of {total}',
     // Whether to toggle the no-nav class on the viewport. Set to false per-instance to disable.
     enableNoNavClass: config.enableNoNavClass !== undefined ? config.enableNoNavClass : true
@@ -457,7 +469,10 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     if (!emblaApi) return;
 
     const slides = containerNode.querySelectorAll(settings.slideSelector);
-    const inViewIndexes = new Set(emblaApi.slidesInView());
+    // Faded slides are stacked in place, so they all count as "in view" — use the selected slide instead
+    const inViewIndexes = settings.fade
+      ? new Set([emblaApi.selectedScrollSnap()])
+      : new Set(emblaApi.slidesInView());
 
     slides.forEach((slide, index) => {
       slide.inert = !inViewIndexes.has(index);
@@ -524,6 +539,13 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
       );
 
       // console.log(`${viewportLabel}: Autoplay enabled (delay: ${settings.autoplayDelay}ms)`);
+    }
+
+    // Conditionally import and add Fade plugin if enabled (cross-fade transitions)
+    if (settings.fade) {
+      const { default: Fade } = await import('https://cdn.jsdelivr.net/npm/embla-carousel-fade@8.1.4/+esm');
+
+      plugins.push(Fade());
     }
 
     emblaApi = EmblaCarousel(viewportNode, options, plugins);
