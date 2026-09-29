@@ -1,6 +1,8 @@
 /**
  * Generic Embla Carousel Module
  * 
+ * @version 1.1.0
+ * 
  * Creates accessible, configurable carousel instances.
  * 
  * Usage Examples:
