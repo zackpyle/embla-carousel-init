@@ -1,9 +1,13 @@
 /**
  * Generic Embla Carousel Module
  * 
- * @version 1.1.0
+ * @version 1.2.0
  * 
  * Creates accessible, configurable carousel instances.
+ *
+ * Changelog
+ * 1.2.0 - Embla 8.1.4 → 8.6.0 (Autoplay adds timeUntilNext() and autoplay:timerset/timerstopped events)
+ * 1.1.0 - Fade option
  * 
  * Usage Examples:
  * 
@@ -46,6 +50,22 @@
  *   nextButtonSelector: '.my-next'
  * });
  * 
+ * // Controls that live outside the viewport, scoped to this carousel (safe with several on a page)
+ * initEmblaCarousel(el.querySelector('.slider__viewport'), {
+ *   scope: el,                              // element, or an ancestor selector like '.slider'
+ *   enableButtons: true,
+ *   prevButtonSelector: '.slider__prev',
+ *   nextButtonSelector: '.slider__next',
+ *   enableDots: true,
+ *   dotsContainerSelector: '.slider__thumbs'
+ * });
+ * 
+ * // Autoplay timer bar: restart a fill on every timer start, using the plugin's own clock
+ * const api = await initEmblaCarousel(el, { loop: true, autoplay: true, autoplayDelay: 6000 });
+ * const autoplay = api.plugins().autoplay;
+ * api.on('autoplay:timerset', () => { const ms = autoplay.timeUntilNext(); ... });
+ * api.on('autoplay:timerstopped', () => { ... });
+ * 
  * // Mobile-only carousel (grid on desktop)
  * initEmblaCarousel('.carousel', {
  *   mobileOnly: true,
@@ -54,7 +74,7 @@
  * });
  */
 
-import EmblaCarousel from 'https://cdn.jsdelivr.net/npm/embla-carousel@8.1.4/esm/embla-carousel.esm.js';
+import EmblaCarousel from 'https://cdn.jsdelivr.net/npm/embla-carousel@8.6.0/esm/embla-carousel.esm.js';
 
 // Fixed class name added to the viewport when there's nothing left to navigate to.
 // Kept as a constant (rather than per-instance configurable) so every carousel using
@@ -84,10 +104,12 @@ const SUPPORTS_INERT = typeof HTMLElement !== 'undefined' && 'inert' in HTMLElem
  * @param {string} config.containScroll - Contain scroll behavior (default: 'trimSnaps')
  * @param {Object} config.breakpoints - Responsive breakpoints with media queries (default: {})
  * @param {boolean} config.enableButtons - Enable prev/next buttons (default: false)
- * @param {string} config.prevButtonSelector - CSS selector for custom previous button (optional)
- * @param {string} config.nextButtonSelector - CSS selector for custom next button (optional)
+ * @param {string|HTMLElement} config.scope - Where custom button/dots selectors are looked up: an element, or
+ *   a selector for an ancestor of the viewport (closest()). Defaults to the whole document. (optional)
+ * @param {string|HTMLElement} config.prevButtonSelector - Custom previous button: selector or element (optional)
+ * @param {string|HTMLElement} config.nextButtonSelector - Custom next button: selector or element (optional)
  * @param {boolean} config.enableDots - Enable dot navigation (default: false)
- * @param {string} config.dotsContainerSelector - CSS selector for custom dots container (optional)
+ * @param {string|HTMLElement} config.dotsContainerSelector - Custom dots container: selector or element (optional)
  * @param {boolean} config.autoScroll - Enable auto-scroll plugin (continuous ticker) (default: false)
  * @param {number} config.autoScrollSpeed - Auto-scroll speed, 0.5 = half speed, 2 = double speed (default: 1)
  * @param {boolean} config.autoScrollStopOnInteraction - Stop auto-scroll on user interaction (default: true)
@@ -95,7 +117,9 @@ const SUPPORTS_INERT = typeof HTMLElement !== 'undefined' && 'inert' in HTMLElem
  * @param {boolean} config.autoplay - Enable autoplay plugin (timed advances) (default: false)
  * @param {number} config.autoplayDelay - Time in ms between slide advances (default: 4000)
  * @param {boolean} config.autoplayStopOnInteraction - Stop autoplay after user drags (default: false)
- * @param {boolean} config.autoplayStopOnMouseEnter - Pause autoplay on mouse enter (default: false)
+ * @param {boolean} config.autoplayStopOnMouseEnter - Pause autoplay on mouse enter (default: true)
+ * @param {boolean} config.autoplayStopOnFocusIn - Stop autoplay when focus moves into a slide (default: true)
+ * @param {boolean} config.autoplayPlayOnInit - Start playing as soon as the carousel initializes (default: true)
  * @param {boolean} config.fade - Enable fade plugin: slides cross-fade in place instead of sliding.
  *   Each slide must fill the viewport (flex: 0 0 100%). Don't combine with autoScroll. (default: false)
  * @param {string} config.announcement - Screen reader announcement template (default: 'Slide {current} of {total}')
@@ -123,7 +147,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
 
 	// A string selector only ever initializes the FIRST match (document.querySelector
 	// behavior). This is easy to miss when a component is repeated by a CMS loop
-	// (e.g. several testimonial carousels on one page) â€” warn loudly rather than
+	// (e.g. several testimonial carousels on one page) — warn loudly rather than
 	// silently leaving the other instances as static, un-initialized markup.
 	if (typeof viewportSelectorOrElement === 'string') {
 		const matchCount = document.querySelectorAll(viewportSelectorOrElement).length;
@@ -152,6 +176,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     dragFree: config.dragFree !== undefined ? config.dragFree : false,
     containScroll: config.containScroll || 'trimSnaps',
     breakpoints: config.breakpoints || {},
+    scope: config.scope || null,
     enableButtons: config.enableButtons || false,
     prevButtonSelector: config.prevButtonSelector || null,
     nextButtonSelector: config.nextButtonSelector || null,
@@ -167,6 +192,8 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     autoplayDelay: config.autoplayDelay !== undefined ? config.autoplayDelay : 4000,
     autoplayStopOnInteraction: config.autoplayStopOnInteraction !== undefined ? config.autoplayStopOnInteraction : false,
     autoplayStopOnMouseEnter: config.autoplayStopOnMouseEnter !== undefined ? config.autoplayStopOnMouseEnter : true,
+    autoplayStopOnFocusIn: config.autoplayStopOnFocusIn !== undefined ? config.autoplayStopOnFocusIn : true,
+    autoplayPlayOnInit: config.autoplayPlayOnInit !== undefined ? config.autoplayPlayOnInit : true,
     // Fade (cross-fade transitions)
     fade: config.fade || false,
     announcement: config.announcement || 'Slide {current} of {total}',
@@ -190,6 +217,26 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
   
   // Check if JS sizing is enabled (either slideWidth or slidesVisible provided)
   const jsSize = settings.slideWidth !== null || settings.slidesVisible !== null;
+
+  // Where custom controls are looked up: an element, an ancestor of the viewport (selector), or the document.
+  const scopeNode = settings.scope instanceof Element
+    ? settings.scope
+    : typeof settings.scope === 'string'
+      ? viewportNode.closest(settings.scope)
+      : document;
+
+  if (settings.scope && !scopeNode) {
+    console.warn(`Embla carousel scope "${settings.scope}" is not an ancestor of ${viewportLabel}; using the document`);
+  }
+
+  /**
+   * Resolve a custom control given as an element or a selector (looked up inside the scope).
+   */
+  function resolveControl(ref) {
+    if (!ref) return null;
+    if (ref instanceof Element) return ref;
+    return (scopeNode || document).querySelector(ref);
+  }
   
   let emblaApi = null;
   let liveRegion = null;
@@ -317,7 +364,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
   /**
    * Remove existing prev/next buttons.
    * Queries the DOM directly rather than relying on potentially stale
-   * variable state â€” handles cases where Etch replaces the DOM between calls.
+   * variable state — handles cases where Etch replaces the DOM between calls.
    */
   function removeButtons() {
     viewportNode.querySelectorAll('.embla__buttons').forEach(el => el.remove());
@@ -329,7 +376,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
   /**
    * Remove existing dots.
    * Queries the DOM directly rather than relying on potentially stale
-   * variable state â€” handles cases where Etch replaces the DOM between calls.
+   * variable state — handles cases where Etch replaces the DOM between calls.
    */
   function removeDots() {
     const existing = viewportNode.querySelector('.embla__dots');
@@ -444,7 +491,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
   /**
    * Toggle NO_NAV_CLASS on the viewport depending on whether there's anywhere left to
    * navigate to. scrollSnapList() returns one entry per "page" the carousel can
-   * land on â€” if there's only one, every slide already fits in view, so nav
+   * land on — if there's only one, every slide already fits in view, so nav
    * (buttons/dots, generated or custom) has nothing useful to do. In that case
    * we add NO_NAV_CLASS so CSS can hide the nav (nav is visible by default, hidden
    * when this class is present).
@@ -516,7 +563,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     
     // Conditionally import and add AutoScroll plugin if enabled (continuous ticker)
     if (settings.autoScroll) {
-      const { default: AutoScroll } = await import('https://cdn.jsdelivr.net/npm/embla-carousel-auto-scroll@8.1.4/+esm');
+      const { default: AutoScroll } = await import('https://cdn.jsdelivr.net/npm/embla-carousel-auto-scroll@8.6.0/+esm');
       
       plugins.push(
         AutoScroll({
@@ -530,13 +577,15 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
 
     // Conditionally import and add Autoplay plugin if enabled (timed advances)
     if (settings.autoplay) {
-      const { default: Autoplay } = await import('https://cdn.jsdelivr.net/npm/embla-carousel-autoplay@8.1.4/+esm');
+      const { default: Autoplay } = await import('https://cdn.jsdelivr.net/npm/embla-carousel-autoplay@8.6.0/+esm');
 
       plugins.push(
         Autoplay({
           delay: settings.autoplayDelay,
           stopOnInteraction: settings.autoplayStopOnInteraction,
           stopOnMouseEnter: settings.autoplayStopOnMouseEnter,
+          stopOnFocusIn: settings.autoplayStopOnFocusIn,
+          playOnInit: settings.autoplayPlayOnInit,
         })
       );
 
@@ -545,7 +594,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
 
     // Conditionally import and add Fade plugin if enabled (cross-fade transitions)
     if (settings.fade) {
-      const { default: Fade } = await import('https://cdn.jsdelivr.net/npm/embla-carousel-fade@8.1.4/+esm');
+      const { default: Fade } = await import('https://cdn.jsdelivr.net/npm/embla-carousel-fade@8.6.0/+esm');
 
       plugins.push(Fade());
     }
@@ -567,8 +616,8 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     if (settings.enableButtons) {
       if (settings.prevButtonSelector && settings.nextButtonSelector) {
         // Use custom buttons
-        prevButton = document.querySelector(settings.prevButtonSelector);
-        nextButton = document.querySelector(settings.nextButtonSelector);
+        prevButton = resolveControl(settings.prevButtonSelector);
+        nextButton = resolveControl(settings.nextButtonSelector);
         // console.log(`${viewportLabel}: Using custom buttons`);
       } else {
         // Generate buttons
@@ -605,7 +654,7 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     if (settings.enableDots) {
       if (settings.dotsContainerSelector) {
         // Use custom dots container
-        dotsContainer = document.querySelector(settings.dotsContainerSelector);
+        dotsContainer = resolveControl(settings.dotsContainerSelector);
         if (dotsContainer) {
           dotButtons = Array.from(dotsContainer.querySelectorAll('button'));
           
@@ -648,9 +697,19 @@ export async function initEmblaCarousel(viewportSelectorOrElement, config = {}) 
     // Announce slide changes to screen readers, once the carousel actually settles.
     // Using 'settle' (rather than 'select') avoids multiple announcements queuing up
     // when a drag passes through several slides before coming to rest.
-    // Skip if autoScroll is enabled to avoid announcement spam
+    // Skip if autoScroll is enabled to avoid announcement spam.
+    // Autoplay advances aren't announced either: only changes the visitor made are (WAI-ARIA carousel pattern).
     if (!settings.autoScroll) {
+      let autoAdvanced = false;
+      emblaApi.on('autoplay:select', () => {
+        autoAdvanced = true;
+      });
+
       emblaApi.on('settle', () => {
+        if (autoAdvanced) {
+          autoAdvanced = false;
+          return;
+        }
         const currentIndex = emblaApi.selectedScrollSnap() + 1;
         liveRegion.textContent = settings.announcement
           .replace('{current}', currentIndex)
