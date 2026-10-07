@@ -16,7 +16,7 @@ One reusable function for setting up [Embla Carousel](https://www.embla-carousel
 
 ## Contents
 
-1. [Host the JS file](#step-1-host-the-js-file)
+1. [Load the JS file](#step-1-load-the-js-file)
 2. [Build the expected HTML structure](#step-2-build-the-expected-html-structure)
 3. [Initialize a basic carousel](#step-3-initialize-a-basic-carousel)
 4. [Add navigation](#step-4-add-navigation)
@@ -32,22 +32,28 @@ One reusable function for setting up [Embla Carousel](https://www.embla-carousel
 - [Troubleshooting](#troubleshooting)
 - [Changelog](#changelog)
 
-## Step 1: Host the JS File
+## Step 1: Load the JS File
 
-Download [`embla-carousel-init.js`](embla-carousel-init.js). It needs to live somewhere reachable by URL. A couple of options:
-
-- Upload it as a static asset from a theme or uploads folder
-- Host it on a CDN and reference the public URL
-
-The file is an ES module. It imports Embla 8.6.0 from jsDelivr itself, so there's nothing else to install. Load it from a `type="module"` script:
+The file is an ES module served from jsDelivr, straight from this repo's releases. It imports Embla 8.6.0 itself, so there's nothing else to install. Import it from a `type="module"` script:
 
 ```html
 <script type="module">
-    import { initEmblaCarousel } from 'https://your-cdn-or-host/embla-carousel-init.js';
+    import { initEmblaCarousel } from 'https://cdn.jsdelivr.net/gh/zackpyle/embla-carousel-init@1.2.0/embla-carousel-init.js';
 
     initEmblaCarousel('.carousel', { loop: true });
 </script>
 ```
+
+The version in the URL controls when you get updates:
+
+- `@1.2.0` pins this exact release. Use this in production, since the file never changes under you.
+- `@1` always serves the newest 1.x release, so you pick up fixes automatically.
+
+Avoid `@main`. jsDelivr caches branch URLs for hours to days, so changes show up unpredictably.
+
+### Self-hosting
+
+To host the file yourself, [download the latest release](https://github.com/zackpyle/embla-carousel-init/releases/latest/download/embla-carousel-init.js) and upload it to your theme, uploads folder, or your own CDN. Then swap the jsDelivr URL in the import for yours.
 
 ## Step 2: Build the Expected HTML Structure
 
@@ -622,7 +628,7 @@ Complete configs for common carousel types. These assume BEM-named components an
 Looping, JS-driven sizing, generated navigation, and autoplay that pauses on hover.
 
 ```javascript
-import { initEmblaCarousel } from 'https://your-cdn-or-host/embla-carousel-init.js';
+import { initEmblaCarousel } from 'https://cdn.jsdelivr.net/gh/zackpyle/embla-carousel-init@1.2.0/embla-carousel-init.js';
 
 initEmblaCarousel('.testimonial-carousel', {
     containerSelector: '.testimonial-carousel__list',
